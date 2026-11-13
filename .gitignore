@@ -1,0 +1,8 @@
+# Build output
+/fm
+/bin/
+
+# Test artifacts
+*.test
+*.out
+coverage.*
