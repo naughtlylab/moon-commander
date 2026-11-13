@@ -13,23 +13,23 @@ import (
 // SPEC §4 — space toggles selection and advances the cursor.
 func TestSpaceTogglesSelection(t *testing.T) {
 	_, m := fixture()
-	path0 := m.Left.Entries[0].Path
+	path0 := m.Left.tab().Entries[0].Path
 
 	m1 := mustUpdate(m, key("space"))
-	if _, ok := m1.Left.Selected[path0]; !ok {
+	if _, ok := m1.Left.tab().Selected[path0]; !ok {
 		t.Errorf("expected %q selected", path0)
 	}
-	assertEqual(t, "cursor after space", m1.Left.Cursor, 1)
-	if len(m.Left.Selected) != 0 {
+	assertEqual(t, "cursor after space", m1.Left.tab().Cursor, 1)
+	if len(m.Left.tab().Selected) != 0 {
 		t.Errorf("update mutated the previous model's Selected map")
 	}
 
-	m1.Left.Cursor = 0
+	m1.Left.tab().Cursor = 0
 	m2 := mustUpdate(m1, key("space"))
-	if _, ok := m2.Left.Selected[path0]; ok {
+	if _, ok := m2.Left.tab().Selected[path0]; ok {
 		t.Errorf("expected %q deselected", path0)
 	}
-	if _, ok := m1.Left.Selected[path0]; !ok {
+	if _, ok := m1.Left.tab().Selected[path0]; !ok {
 		t.Errorf("update mutated the previous model's Selected map")
 	}
 
@@ -37,8 +37,8 @@ func TestSpaceTogglesSelection(t *testing.T) {
 		_, m := fixture()
 		m.Active = RightPane
 		m = mustUpdate(m, key("space"))
-		assertEqual(t, "left selected", len(m.Left.Selected), 0)
-		assertEqual(t, "right selected", len(m.Right.Selected), 1)
+		assertEqual(t, "left selected", len(m.Left.tab().Selected), 0)
+		assertEqual(t, "right selected", len(m.Right.tab().Selected), 1)
 	})
 }
 
@@ -61,7 +61,7 @@ func TestNavigationIgnoredWhileLoading(t *testing.T) {
 	for _, k := range []string{"enter", "l", "backspace", "h"} {
 		t.Run(k, func(t *testing.T) {
 			_, m := fixture()
-			m.Left.Loading = true
+			m.Left.tab().Loading = true
 			before := m
 			m, cmd := m.update(key(k))
 			if cmd != nil {
@@ -98,14 +98,14 @@ func TestDirMessagesRouteToPane(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, m := fixture()
 			other := *m.pane(1 - tt.wantPane)
-			m.pane(tt.wantPane).Loading = true
+			m.pane(tt.wantPane).tab().Loading = true
 			m = mustUpdate(m, tt.msg)
 			p := m.pane(tt.wantPane)
-			assertEqual(t, "Cwd", p.Cwd, tt.wantCwd)
-			assertEqual(t, "Loading", p.Loading, false)
-			assertEqual(t, "names", entryNames(p.Entries), tt.wantNames)
-			if !errors.Is(p.Err, tt.wantErr) {
-				t.Errorf("Err = %v, want %v", p.Err, tt.wantErr)
+			assertEqual(t, "Cwd", p.tab().Cwd, tt.wantCwd)
+			assertEqual(t, "Loading", p.tab().Loading, false)
+			assertEqual(t, "names", entryNames(p.tab().Entries), tt.wantNames)
+			if !errors.Is(p.tab().Err, tt.wantErr) {
+				t.Errorf("Err = %v, want %v", p.tab().Err, tt.wantErr)
 			}
 			if tt.wantErr != nil && m.StatusText == "" {
 				t.Errorf("expected StatusText to describe the error")
@@ -118,8 +118,8 @@ func TestDirMessagesRouteToPane(t *testing.T) {
 		_, m := fixture()
 		m = mustUpdate(m, DirLoadErrMsg{Pane: LeftPane, Path: "/root", Err: boom})
 		m = mustUpdate(m, DirLoadedMsg{Pane: LeftPane, Path: "/home", Entries: ents("/home", "user/")})
-		if m.Left.Err != nil {
-			t.Errorf("Err = %v, want nil", m.Left.Err)
+		if m.Left.tab().Err != nil {
+			t.Errorf("Err = %v, want nil", m.Left.tab().Err)
 		}
 	})
 }
@@ -148,7 +148,7 @@ func TestInitLoadsBothPanes(t *testing.T) {
 	mfs.AddDir("/a", ents("/a", "f", "d/")...)
 	mfs.AddDir("/b")
 	m := NewRootModel(mfs, "/a", "/b")
-	if !m.Left.Loading || !m.Right.Loading {
+	if !m.Left.tab().Loading || !m.Right.tab().Loading {
 		t.Fatal("panes should start loading")
 	}
 	batch, ok := run(t, m.Init()).(tea.BatchMsg)
@@ -170,17 +170,17 @@ func TestSelectionPersistsAcrossDirs(t *testing.T) {
 	m = mustUpdate(m, key("j"))
 	m = mustUpdate(m, key("j"))
 	m = mustUpdate(m, key("space")) // select /home/user/a.txt
-	m.Left.Cursor = 0               // docs/
+	m.Left.tab().Cursor = 0         // docs/
 
 	m, cmd := m.update(key("enter"))
 	m = mustUpdate(m, run(t, cmd))
-	assertEqual(t, "Cwd", m.Left.Cwd, "/home/user/docs")
-	if _, ok := m.Left.Selected["/home/user/a.txt"]; !ok {
-		t.Fatalf("selection lost after directory change: %v", m.Left.Selected)
+	assertEqual(t, "Cwd", m.Left.tab().Cwd, "/home/user/docs")
+	if _, ok := m.Left.tab().Selected["/home/user/a.txt"]; !ok {
+		t.Fatalf("selection lost after directory change: %v", m.Left.tab().Selected)
 	}
 	m = mustUpdate(m, key("space")) // select /home/user/docs/notes.md
 	m = mustUpdate(m, DirLoadErrMsg{Pane: LeftPane, Path: "/root", Err: errors.New("denied")})
-	assertEqual(t, "selected count", len(m.Left.Selected), 2)
+	assertEqual(t, "selected count", len(m.Left.tab().Selected), 2)
 
 	m.StatusText = ""
 	lines := viewLines(m)

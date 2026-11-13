@@ -22,8 +22,11 @@ const (
 	ModeConfirmModal
 )
 
-type PaneModel struct {
-	ID           ActivePane
+type TabID int
+
+// TabModel is an independent browsing context within a pane.
+type TabModel struct {
+	ID           TabID
 	Cwd          string
 	Entries      []fs.Entry
 	Cursor       int // Index in Entries (0 <= Cursor < len(Entries))
@@ -31,6 +34,13 @@ type PaneModel struct {
 	Loading      bool
 	Err          error
 	Selected     map[string]struct{} // Multi-select paths
+}
+
+type PaneModel struct {
+	ID        ActivePane
+	Tabs      []TabModel // len(Tabs) >= 1, always
+	ActiveTab int        // index into Tabs
+	NextTabID TabID      // monotonic per pane; IDs are never reused
 }
 
 type RootModel struct {
@@ -59,14 +69,18 @@ func NewRootModel(fsys fs.FileSystem, leftDir, rightDir string) RootModel {
 }
 
 func newPane(id ActivePane, dir string) PaneModel {
-	return PaneModel{ID: id, Cwd: dir, Loading: true, Selected: map[string]struct{}{}}
+	return PaneModel{ID: id, Tabs: []TabModel{newTab(0, dir)}, NextTabID: 1}
+}
+
+func newTab(id TabID, dir string) TabModel {
+	return TabModel{ID: id, Cwd: dir, Loading: true, Selected: map[string]struct{}{}}
 }
 
 // Init loads both panes' starting directories.
 func (m RootModel) Init() tea.Cmd {
 	return tea.Batch(
-		loadDirCmd(m.FS, LeftPane, m.Left.Cwd),
-		loadDirCmd(m.FS, RightPane, m.Right.Cwd),
+		loadDirCmd(m.FS, LeftPane, m.Left.tab().ID, m.Left.tab().Cwd),
+		loadDirCmd(m.FS, RightPane, m.Right.tab().ID, m.Right.tab().Cwd),
 	)
 }
 
@@ -83,8 +97,23 @@ func (m *RootModel) pane(id ActivePane) *PaneModel {
 	return &m.Left
 }
 
+// tab returns the pane's active tab.
+func (p *PaneModel) tab() *TabModel {
+	return &p.Tabs[p.ActiveTab]
+}
+
+// tabByID returns the tab with the given ID, or nil if it has been closed.
+func (p *PaneModel) tabByID(id TabID) *TabModel {
+	for i := range p.Tabs {
+		if p.Tabs[i].ID == id {
+			return &p.Tabs[i]
+		}
+	}
+	return nil
+}
+
 // clampCursor enforces State Machine Invariant 1.
-func (p *PaneModel) clampCursor() {
+func (p *TabModel) clampCursor() {
 	switch {
 	case len(p.Entries) == 0, p.Cursor < 0:
 		p.Cursor = 0

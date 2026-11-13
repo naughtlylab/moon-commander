@@ -10,27 +10,29 @@ import (
 // sizeColWidth fits "<DIR>" and every humanSize result ("1023K", "1023B").
 const sizeColWidth = 5
 
-// renderPane draws one bordered pane with an outer width of outerW cells.
+// renderPane draws a pane's tab row above its bordered box (showing the
+// active tab), with an outer width of outerW cells.
 func (m RootModel) renderPane(p PaneModel, outerW int) string {
 	innerW := max(0, outerW-2)
 	rows := visibleRows(m.Height)
 	active := p.ID == m.Active
+	t := p.tab()
 
 	lines := make([]string, 0, rows+1)
-	lines = append(lines, m.Styles.Header.Render(fitLeft(sanitize(p.Cwd), innerW)))
+	lines = append(lines, m.Styles.Header.Render(fitLeft(sanitize(t.Cwd), innerW)))
 
 	switch {
-	case p.Loading:
+	case t.Loading:
 		lines = append(lines, fit("Loading…", innerW))
-	case p.Err != nil:
-		lines = append(lines, m.Styles.Error.Render(fit(sanitize(p.Err.Error()), innerW)))
+	case t.Err != nil:
+		lines = append(lines, m.Styles.Error.Render(fit(sanitize(t.Err.Error()), innerW)))
 	default:
-		end := min(len(p.Entries), p.ScrollOffset+rows)
-		for i := p.ScrollOffset; i < end; i++ {
-			e := p.Entries[i]
-			_, sel := p.Selected[e.Path]
+		end := min(len(t.Entries), t.ScrollOffset+rows)
+		for i := t.ScrollOffset; i < end; i++ {
+			e := t.Entries[i]
+			_, sel := t.Selected[e.Path]
 			row := entryRow(e, sel, innerW)
-			if i == p.Cursor {
+			if i == t.Cursor {
 				if active {
 					row = m.Styles.CursorActive.Render(row)
 				} else {
@@ -49,7 +51,7 @@ func (m RootModel) renderPane(p PaneModel, outerW int) string {
 	if active {
 		border = m.Styles.BorderActive
 	}
-	return border.Render(strings.Join(lines, "\n"))
+	return m.tabRow(p, outerW, active) + "\n" + border.Render(strings.Join(lines, "\n"))
 }
 
 // entryRow formats a single entry as exactly w cells:

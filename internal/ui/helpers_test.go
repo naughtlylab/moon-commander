@@ -16,7 +16,7 @@ func key(s string) tea.KeyMsg {
 	special := map[string]tea.KeyType{
 		"enter": tea.KeyEnter, "backspace": tea.KeyBackspace, "tab": tea.KeyTab,
 		"up": tea.KeyUp, "down": tea.KeyDown, "left": tea.KeyLeft, "right": tea.KeyRight,
-		"space": tea.KeySpace, "ctrl+c": tea.KeyCtrlC,
+		"space": tea.KeySpace, "ctrl+c": tea.KeyCtrlC, "ctrl+t": tea.KeyCtrlT, "ctrl+w": tea.KeyCtrlW,
 	}
 	if t, ok := special[s]; ok {
 		return tea.KeyMsg{Type: t}
@@ -77,32 +77,58 @@ func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 	return cmd()
 }
 
-// assertCursorInvariant checks SPEC §3.1 and §3.6 on both panes.
+// assertCursorInvariant checks SPEC §3.1, §3.6 and tab invariants T1/T2 on
+// every tab of both panes.
 func assertCursorInvariant(t *testing.T, m RootModel) {
 	t.Helper()
-	rows := m.Height - 4
+	rows := m.Height - 5
 	if rows < 1 {
 		rows = 1
 	}
 	for _, p := range []PaneModel{m.Left, m.Right} {
-		n := len(p.Entries)
-		maxOff := n - rows
-		if maxOff < 0 {
-			maxOff = 0
+		if len(p.Tabs) < 1 || p.ActiveTab < 0 || p.ActiveTab >= len(p.Tabs) {
+			t.Errorf("pane %d: T1 violated: %d tabs, ActiveTab %d", p.ID, len(p.Tabs), p.ActiveTab)
+			continue
 		}
-		if p.ScrollOffset < 0 || p.ScrollOffset > maxOff {
-			t.Errorf("pane %d: ScrollOffset %d out of [0,%d]", p.ID, p.ScrollOffset, maxOff)
-		}
-		if n > 0 && (p.Cursor < p.ScrollOffset || p.Cursor >= p.ScrollOffset+rows) {
-			t.Errorf("pane %d: Cursor %d not visible in window [%d,%d)", p.ID, p.Cursor, p.ScrollOffset, p.ScrollOffset+rows)
-		}
-		if n == 0 && p.Cursor != 0 {
-			t.Errorf("pane %d: empty but Cursor = %d", p.ID, p.Cursor)
-		}
-		if n > 0 && (p.Cursor < 0 || p.Cursor >= n) {
-			t.Errorf("pane %d: Cursor %d out of [0,%d)", p.ID, p.Cursor, n)
+		seen := map[TabID]bool{}
+		for _, tb := range p.Tabs {
+			if seen[tb.ID] || tb.ID >= p.NextTabID {
+				t.Errorf("pane %d: T2 violated: tab ID %d (NextTabID %d, dup %v)", p.ID, tb.ID, p.NextTabID, seen[tb.ID])
+			}
+			seen[tb.ID] = true
+			n := len(tb.Entries)
+			maxOff := max(0, n-rows)
+			if tb.ScrollOffset < 0 || tb.ScrollOffset > maxOff {
+				t.Errorf("pane %d tab %d: ScrollOffset %d out of [0,%d]", p.ID, tb.ID, tb.ScrollOffset, maxOff)
+			}
+			if n > 0 && (tb.Cursor < tb.ScrollOffset || tb.Cursor >= tb.ScrollOffset+rows) {
+				t.Errorf("pane %d tab %d: Cursor %d not visible in [%d,%d)", p.ID, tb.ID, tb.Cursor, tb.ScrollOffset, tb.ScrollOffset+rows)
+			}
+			if n == 0 && tb.Cursor != 0 {
+				t.Errorf("pane %d tab %d: empty but Cursor = %d", p.ID, tb.ID, tb.Cursor)
+			}
+			if n > 0 && (tb.Cursor < 0 || tb.Cursor >= n) {
+				t.Errorf("pane %d tab %d: Cursor %d out of [0,%d)", p.ID, tb.ID, tb.Cursor, n)
+			}
 		}
 	}
+}
+
+// tabIDs lists the IDs of a pane's tabs in order.
+func tabIDs(p PaneModel) []TabID {
+	out := make([]TabID, len(p.Tabs))
+	for i, tb := range p.Tabs {
+		out[i] = tb.ID
+	}
+	return out
+}
+
+// press applies a sequence of keys, discarding commands.
+func press(m RootModel, keys ...string) RootModel {
+	for _, k := range keys {
+		m = mustUpdate(m, key(k))
+	}
+	return m
 }
 
 func assertEqual(t *testing.T, what string, got, want any) {

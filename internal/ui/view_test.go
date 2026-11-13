@@ -35,7 +35,7 @@ func TestViewInitializing(t *testing.T) {
 
 // SPEC §6 — exact dimensions.
 func TestViewDimensions(t *testing.T) {
-	sizes := []struct{ w, h int }{{80, 24}, {81, 10}, {40, 7}, {120, 30}, {33, 5}}
+	sizes := []struct{ w, h int }{{80, 24}, {81, 10}, {40, 7}, {120, 30}, {33, 6}}
 	for _, sz := range sizes {
 		_, m := fixture()
 		long := strings.Repeat("very-long-name-", 10)
@@ -81,7 +81,7 @@ func TestViewPaneContent(t *testing.T) {
 
 func TestViewScrollWindow(t *testing.T) {
 	_, m := fixture()
-	m = mustUpdate(m, tea.WindowSizeMsg{Width: 80, Height: 8})
+	m = mustUpdate(m, tea.WindowSizeMsg{Width: 80, Height: 9})
 	m = mustUpdate(m, DirLoadedMsg{Pane: LeftPane, Path: "/d", Entries: ents("/d", tenFiles()...)})
 	for i := 0; i < 9; i++ {
 		m = mustUpdate(m, key("j"))
@@ -102,17 +102,17 @@ func TestViewScrollWindow(t *testing.T) {
 func TestViewLoadingAndError(t *testing.T) {
 	tests := []struct {
 		name    string
-		mutate  func(p *PaneModel)
+		mutate  func(t *TabModel)
 		want    string
 		notWant string
 	}{
-		{name: "loading", mutate: func(p *PaneModel) { p.Loading = true }, want: "Loading…", notWant: "docs/"},
-		{name: "error", mutate: func(p *PaneModel) { p.Err = errors.New("permission denied") }, want: "permission denied", notWant: "docs/"},
+		{name: "loading", mutate: func(t *TabModel) { t.Loading = true }, want: "Loading…", notWant: "docs/"},
+		{name: "error", mutate: func(t *TabModel) { t.Err = errors.New("permission denied") }, want: "permission denied", notWant: "docs/"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, m := fixture()
-			tt.mutate(&m.Left)
+			tt.mutate(m.Left.tab())
 			lines := viewLines(m)
 			if lineWith(lines, tt.want) < 0 {
 				t.Errorf("missing %q", tt.want)
@@ -133,7 +133,7 @@ func TestViewTruncation(t *testing.T) {
 	m = mustUpdate(m, DirLoadedMsg{Pane: LeftPane, Path: "/a/b/c/d/e/f/g/h/i/j/k/deep/dir",
 		Entries: ents("/x", strings.Repeat("n", 100))})
 	lines := viewLines(m)
-	if h := lines[1]; !strings.HasPrefix(h, "│…") || !strings.Contains(h, "/deep/dir│") {
+	if h := lines[2]; !strings.HasPrefix(h, "│…") || !strings.Contains(h, "/deep/dir│") {
 		t.Errorf("expected left-truncated cwd:\n%s", strings.Join(lines, "\n"))
 	}
 	if lineWith(lines, "nnn…") < 0 {

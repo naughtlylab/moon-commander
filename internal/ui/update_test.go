@@ -36,31 +36,31 @@ func TestInvariant1_CursorBounds(t *testing.T) {
 			if tt.entries != nil {
 				m = mustUpdate(m, DirLoadedMsg{Pane: LeftPane, Path: "/home/user", Entries: ents("/home/user", tt.entries...)})
 			}
-			m.Left.Cursor = tt.startCur
+			m.Left.tab().Cursor = tt.startCur
 			for _, k := range tt.keys {
 				m = mustUpdate(m, key(k))
 				assertCursorInvariant(t, m)
 			}
-			assertEqual(t, "Left.Cursor", m.Left.Cursor, tt.wantCursor)
+			assertEqual(t, "Left.Cursor", m.Left.tab().Cursor, tt.wantCursor)
 		})
 	}
 
 	t.Run("loading a directory resets/clamps a stale cursor", func(t *testing.T) {
 		for _, n := range []int{0, 1, 2} {
 			_, m := fixture()
-			m.Left.Cursor = 3
+			m.Left.tab().Cursor = 3
 			m = mustUpdate(m, DirLoadedMsg{Pane: LeftPane, Path: "/x", Entries: ents("/x", []string{"a", "b"}[:n]...)})
 			assertCursorInvariant(t, m)
-			assertEqual(t, "Left.Cursor", m.Left.Cursor, 0)
+			assertEqual(t, "Left.Cursor", m.Left.tab().Cursor, 0)
 		}
 	})
 
 	t.Run("load error keeps cursor valid", func(t *testing.T) {
 		_, m := fixture()
-		m.Left.Cursor = 2
+		m.Left.tab().Cursor = 2
 		m = mustUpdate(m, DirLoadErrMsg{Pane: LeftPane, Path: "/x", Err: errors.New("denied")})
 		assertCursorInvariant(t, m)
-		assertEqual(t, "Left.Cursor", m.Left.Cursor, 2)
+		assertEqual(t, "Left.Cursor", m.Left.tab().Cursor, 2)
 	})
 }
 
@@ -82,7 +82,7 @@ func TestInvariant2_DirectorySorting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mfs, m := fixture()
 			mfs.AddDir("/home/user/docs", ents("/home/user/docs", tt.input...)...)
-			m.Left.Cursor = 0 // docs/
+			m.Left.tab().Cursor = 0 // docs/
 
 			m, cmd := m.update(key("enter"))
 			msg, ok := run(t, cmd).(DirLoadedMsg)
@@ -92,7 +92,7 @@ func TestInvariant2_DirectorySorting(t *testing.T) {
 			assertEqual(t, "msg entries", entryNames(msg.Entries), tt.want)
 
 			m = mustUpdate(m, msg)
-			assertEqual(t, "pane entries", entryNames(m.Left.Entries), tt.want)
+			assertEqual(t, "pane entries", entryNames(m.Left.tab().Entries), tt.want)
 		})
 	}
 }
@@ -114,7 +114,7 @@ func TestInvariant3_PaneSwitching(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, m := fixture()
 			m.Active = tt.start
-			m.Left.Cursor, m.Right.Cursor = 2, 0
+			m.Left.tab().Cursor, m.Right.tab().Cursor = 2, 0
 			wantLeft, wantRight := m.Left, m.Right
 			for i := 0; i < tt.tabs; i++ {
 				var cmd tea.Cmd
@@ -150,7 +150,7 @@ func TestInvariant4_DirectoryTraversal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, m := fixture()
 			m.Active = tt.active
-			m.pane(tt.active).Cursor = tt.cursor
+			m.pane(tt.active).tab().Cursor = tt.cursor
 			before := m
 
 			m, cmd := m.update(key(tt.key))
@@ -163,8 +163,8 @@ func TestInvariant4_DirectoryTraversal(t *testing.T) {
 				return
 			}
 			p := m.pane(tt.active)
-			assertEqual(t, "Loading", p.Loading, true)
-			assertEqual(t, "Cwd (unchanged until loaded)", p.Cwd, before.pane(tt.active).Cwd)
+			assertEqual(t, "Loading", p.tab().Loading, true)
+			assertEqual(t, "Cwd (unchanged until loaded)", p.tab().Cwd, before.pane(tt.active).tab().Cwd)
 			assertEqual(t, "other pane", *m.pane(1 - tt.active), *before.pane(1 - tt.active))
 
 			msg, ok := run(t, cmd).(DirLoadedMsg)
@@ -176,9 +176,9 @@ func TestInvariant4_DirectoryTraversal(t *testing.T) {
 
 			m = mustUpdate(m, msg)
 			p = m.pane(tt.active)
-			assertEqual(t, "Cwd after load", p.Cwd, tt.wantPath)
-			assertEqual(t, "Loading after load", p.Loading, false)
-			assertEqual(t, "Cursor after load", p.Cursor, 0)
+			assertEqual(t, "Cwd after load", p.tab().Cwd, tt.wantPath)
+			assertEqual(t, "Loading after load", p.tab().Loading, false)
+			assertEqual(t, "Cursor after load", p.tab().Cursor, 0)
 		})
 	}
 
@@ -214,11 +214,11 @@ func TestInvariant5_ParentTraversal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, m := fixture()
 			m.Active = tt.active
-			m.pane(tt.active).Cwd = tt.cwd
+			m.pane(tt.active).tab().Cwd = tt.cwd
 			other := *m.pane(1 - tt.active)
 
 			m, cmd := m.update(key(tt.key))
-			assertEqual(t, "Loading", m.pane(tt.active).Loading, true)
+			assertEqual(t, "Loading", m.pane(tt.active).tab().Loading, true)
 			assertEqual(t, "other pane", *m.pane(1 - tt.active), other)
 
 			msg, ok := run(t, cmd).(DirLoadedMsg)
@@ -229,8 +229,8 @@ func TestInvariant5_ParentTraversal(t *testing.T) {
 			assertEqual(t, "msg.Path", msg.Path, tt.wantPath)
 
 			m = mustUpdate(m, msg)
-			assertEqual(t, "Cwd after load", m.pane(tt.active).Cwd, tt.wantPath)
-			assertEqual(t, "Loading after load", m.pane(tt.active).Loading, false)
+			assertEqual(t, "Cwd after load", m.pane(tt.active).tab().Cwd, tt.wantPath)
+			assertEqual(t, "Loading after load", m.pane(tt.active).tab().Loading, false)
 		})
 	}
 
@@ -247,11 +247,11 @@ func TestInvariant5_ParentTraversal(t *testing.T) {
 		assertEqual(t, "msg", msg, DirLoadErrMsg{Pane: LeftPane, Path: "/home", Err: boom})
 
 		m = mustUpdate(m, msg)
-		assertEqual(t, "Cwd", m.Left.Cwd, "/home/user")
-		assertEqual(t, "Loading", m.Left.Loading, false)
-		if !errors.Is(m.Left.Err, boom) {
-			t.Errorf("Err = %v, want %v", m.Left.Err, boom)
+		assertEqual(t, "Cwd", m.Left.tab().Cwd, "/home/user")
+		assertEqual(t, "Loading", m.Left.tab().Loading, false)
+		if !errors.Is(m.Left.tab().Err, boom) {
+			t.Errorf("Err = %v, want %v", m.Left.tab().Err, boom)
 		}
-		assertEqual(t, "entries kept", len(m.Left.Entries), 4)
+		assertEqual(t, "entries kept", len(m.Left.tab().Entries), 4)
 	})
 }

@@ -6,6 +6,7 @@ import "github.com/naughtlylab/moon-commander/internal/fs"
 // sorted and must not be mutated by the sender after delivery.
 type DirLoadedMsg struct {
 	Pane    ActivePane
+	Tab     TabID
 	Path    string
 	Entries []fs.Entry
 }
@@ -13,6 +14,7 @@ type DirLoadedMsg struct {
 // DirLoadErrMsg reports a failed directory listing.
 type DirLoadErrMsg struct {
 	Pane ActivePane
+	Tab  TabID
 	Path string
 	Err  error
 }
