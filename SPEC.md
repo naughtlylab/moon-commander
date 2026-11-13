@@ -128,6 +128,7 @@ type DirLoadErrMsg struct {
    * `0 <= ScrollOffset <= max(0, len(Entries) - visibleRows)`
    * Recomputed on cursor moves, directory loads, and `tea.WindowSizeMsg`.
 7. **No Navigation While Loading:** Traversal keys (§3.4, §3.5) are no-ops while the active pane has `Loading == true`.
+8. **Selection Persistence:** `PaneModel.Selected` is keyed by absolute path and is NOT cleared by directory changes (`DirLoadedMsg`) or load errors, so selections can be gathered across directories for Milestone 2 operations.
 
 ## 4. Keybindings (Milestone 1)
 * `up` / `k`: Move cursor up 1 row in active pane.
@@ -146,16 +147,22 @@ type DirLoadErrMsg struct {
 
 ## 6. View Layout (M1.3)
 * **Dimensions:** Output is exactly `Height` lines, each exactly `Width` cells wide. Left pane outer width = `Width/2`, right pane = remainder. Before the first `tea.WindowSizeMsg` (`Width == 0`), `View()` returns `"Initializing…"`.
+  * **Limitation:** The exact-dimension guarantee holds only for `Height >= 5` (2 border lines + header + 1 entry row + status bar). Smaller terminals render more lines than `Height`; no special handling is provided.
 * **Panes:** Rounded border. Active pane border uses an accent color; inactive is dimmed.
 * **Header:** First inner line shows `Cwd`, left-truncated with `…` if too wide.
 * **Rows:** Only the visible window (`ScrollOffset` .. `ScrollOffset+visibleRows`). Each row: selection marker (`*` or space), name (directories suffixed with `/`), right-aligned size column (human-readable for files, e.g. `1.2K`; `<DIR>` for directories). Names truncated with `…` using display width.
 * **Cursor Row:** Reverse video in the active pane, underlined in the inactive pane.
 * **Loading / Error:** Pane body shows `Loading…` while `Loading`, otherwise the error text when `Err != nil`.
-* **Status Bar:** One line. Shows `StatusText` if non-empty; otherwise `<n> items · <k> selected` for the active pane plus short key hints.
+* **Status Bar:** One line. Shows `StatusText` if non-empty; otherwise `<n> items · <k> selected` for the active pane plus short key hints. `<n>` is `len(Entries)` of the current directory; `<k>` is `len(Selected)`, the pane-wide total across all directories (§3.8).
 * **Files:** `view.go`, `pane_view.go`, `statusbar.go`, `styles.go` (each < 300 lines).
 
 ## 7. Entrypoint (`cmd/fm/main.go`)
 * Usage: `fm [LEFT_DIR] [RIGHT_DIR]`. `LEFT_DIR` defaults to the current working directory; `RIGHT_DIR` defaults to `LEFT_DIR`.
 * `main` resolves paths to absolute (the only OS access outside `fs` commands), injects `fs.OS{}`, and runs `tea.NewProgram(model, tea.WithAltScreen())`.
-* A nonexistent start directory is not fatal (the pane displays the error). Program errors are printed to stderr with exit code 1.
+* A nonexistent start directory is not fatal (the pane displays the error).
+* **Exit codes:** `0` on normal quit and for `-h`/`-help`. `1` for every error, including usage errors (too many arguments, unknown flags) and program errors. Errors are printed to stderr prefixed with `fm:`; usage errors also print the usage text.
+* `main()` delegates to a testable `run(args, cwd, stderr, start) int`, where `start` launches the Bubble Tea program and is injected so tests never open a terminal.
 * Deferred: `internal/keymap` (§1.1) migration to `bubbles/key` is not part of M1.3.
+
+## 8. Known Issues
+* **Startup key drop (deferred):** Keys sent in a rapid burst immediately after launch may be lost (observed under tmux); keys typed after the first frame are handled normally. The suspected cause is terminal capability/background queries during Bubble Tea/termenv startup consuming input. Unconfirmed; revisit after M2.0.

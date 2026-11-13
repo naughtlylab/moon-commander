@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -14,30 +15,50 @@ import (
 	"github.com/naughtlylab/moon-commander/internal/ui"
 )
 
-func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [LEFT_DIR] [RIGHT_DIR]\n", filepath.Base(os.Args[0]))
-		flag.PrintDefaults()
-	}
-	flag.Parse()
+const usage = "Usage: fm [LEFT_DIR] [RIGHT_DIR]\n"
 
+func main() {
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fm:", err)
 		os.Exit(1)
 	}
-	left, right, err := resolveDirs(flag.Args(), cwd)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "fm:", err)
-		flag.Usage()
-		os.Exit(2)
+	os.Exit(run(os.Args[1:], cwd, os.Stderr, startProgram))
+}
+
+// startProgram runs the TUI against the real filesystem.
+func startProgram(left, right string) error {
+	m := ui.NewRootModel(fs.OS{}, left, right)
+	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+	return err
+}
+
+// run parses args and launches start, returning the process exit code
+// (SPEC §7): 0 on success or -h, 1 for any error.
+func run(args []string, cwd string, stderr io.Writer, start func(left, right string) error) int {
+	flags := flag.NewFlagSet("fm", flag.ContinueOnError)
+	flags.SetOutput(io.Discard) // errors are reported below with the fm: prefix
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprint(stderr, usage)
+			return 0
+		}
+		fmt.Fprintln(stderr, "fm:", err)
+		fmt.Fprint(stderr, usage)
+		return 1
 	}
 
-	m := ui.NewRootModel(fs.OS{}, left, right)
-	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "fm:", err)
-		os.Exit(1)
+	left, right, err := resolveDirs(flags.Args(), cwd)
+	if err != nil {
+		fmt.Fprintln(stderr, "fm:", err)
+		fmt.Fprint(stderr, usage)
+		return 1
 	}
+	if err := start(left, right); err != nil {
+		fmt.Fprintln(stderr, "fm:", err)
+		return 1
+	}
+	return 0
 }
 
 // resolveDirs maps positional args to absolute start directories (SPEC §7).

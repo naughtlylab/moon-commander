@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -161,4 +162,29 @@ func TestInitLoadsBothPanes(t *testing.T) {
 	}
 	assertEqual(t, "left", entryNames(got[LeftPane].Entries), []string{"d", "f"})
 	assertEqual(t, "right path", got[RightPane].Path, "/b")
+}
+
+// SPEC §3.8 — selections persist across directory changes and load errors.
+func TestSelectionPersistsAcrossDirs(t *testing.T) {
+	_, m := fixture()
+	m = mustUpdate(m, key("j"))
+	m = mustUpdate(m, key("j"))
+	m = mustUpdate(m, key("space")) // select /home/user/a.txt
+	m.Left.Cursor = 0               // docs/
+
+	m, cmd := m.update(key("enter"))
+	m = mustUpdate(m, run(t, cmd))
+	assertEqual(t, "Cwd", m.Left.Cwd, "/home/user/docs")
+	if _, ok := m.Left.Selected["/home/user/a.txt"]; !ok {
+		t.Fatalf("selection lost after directory change: %v", m.Left.Selected)
+	}
+	m = mustUpdate(m, key("space")) // select /home/user/docs/notes.md
+	m = mustUpdate(m, DirLoadErrMsg{Pane: LeftPane, Path: "/root", Err: errors.New("denied")})
+	assertEqual(t, "selected count", len(m.Left.Selected), 2)
+
+	m.StatusText = ""
+	lines := viewLines(m)
+	if s := lines[len(lines)-1]; !strings.Contains(s, "1 items · 2 selected") {
+		t.Errorf("status should show pane-wide total: %q", s)
+	}
 }
